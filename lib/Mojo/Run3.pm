@@ -3,9 +3,11 @@ use Mojo::Base 'Mojo::EventEmitter';
 
 use Errno qw(EAGAIN ECONNRESET EINTR EPIPE EWOULDBLOCK EIO);
 use IO::Handle;
+use IO::Pty;
 use Mojo::IOLoop::ReadWriteFork::SIGCHLD;
 use Mojo::IOLoop;
 use Mojo::Promise;
+use Scalar::Util qw(blessed weaken);
 
 our $VERSION = '0.01';
 
@@ -13,6 +15,7 @@ our @SAFE_SIG = grep {
   !m!^(NUM\d+|__[A-Z0-9]+__|ALL|CATCHALL|DEFER|HOLD|IGNORE|MAX|PAUSE|RTMAX|RTMIN|SEGV|SETS)$!
 } keys %SIG;
 
+has driver => 'pipe';
 has ioloop => sub { Mojo::IOLoop->singleton }, weak => 1;
 
 sub close {
@@ -26,6 +29,8 @@ sub close {
 }
 
 sub exit_status { shift->status >> 8 }
+
+sub handle { $_[0]->{fh}{$_[1]} }
 
 sub kill {
   my ($self, $signal) = (@_, 15);
@@ -68,7 +73,7 @@ sub _cleanup {
   my ($self) = @_;
 
   my $reactor = $self->ioloop->reactor;
-  for my $name (qw(stdin stderr stdout)) {
+  for my $name (qw(pty stdin stderr stdout)) {
     my $h = delete $self->{fh}{$name} or next;
     $reactor->remove($h) unless $name eq 'stdin';
     $h->close;
@@ -104,9 +109,15 @@ sub _prepare_filehandles {
   my ($self) = @_;
 
   my %fh;
-  @fh{qw(stdin_read stdin_write)}   = $self->_make_pipe;
-  @fh{qw(stdout_read stdout_write)} = $self->_make_pipe;
-  @fh{qw(stderr_read stderr_write)} = $self->_make_pipe;
+  ($fh{parent}{stdout}, $fh{child}{stdout}) = $self->_make_pipe;
+  ($fh{parent}{stderr}, $fh{child}{stderr}) = $self->_make_pipe;
+
+  if ($self->driver eq 'pty') {
+    ($fh{parent}{pty}, $fh{child}{pty}) = (IO::Pty->new) x 2;
+  }
+  else {
+    ($fh{child}{stdin}, $fh{parent}{stdin}) = $self->_make_pipe;
+  }
 
   return \%fh;
 }
@@ -127,8 +138,13 @@ sub _read {
 sub _start_child {
   my ($self, $fh, $code) = @_;
 
-  delete($fh->{$_})->close for (qw(stdin_write stdout_read stderr_read));
-  $fh = {stdin => $fh->{stdin_read}, stdout => $fh->{stdout_write}, stderr => $fh->{stderr_write}};
+  if (my $pty = $fh->{parent}{pty}) {
+    $pty->make_slave_controlling_terminal;
+    $fh->{child}{stdin} = $pty->slave;
+  }
+
+  $fh->{parent}{$_}->close for keys %{$fh->{parent}};
+  $fh = $self->{fh} = $fh->{child};
 
   open STDIN,  '<&' . fileno($fh->{stdin})  or die "Could not dup stdin: $!";
   open STDOUT, '>&' . fileno($fh->{stdout}) or die "Could not dup stdout: $!";
@@ -149,13 +165,15 @@ sub _start_child {
 sub _start_parent {
   my ($self, $fh) = @_;
 
-  delete($fh->{$_})->close for (qw(stdin_read stdout_write stderr_write));
-  $fh = {stdin => $fh->{stdin_write}, stdout => $fh->{stdout_read}, stderr => $fh->{stderr_read}};
+  $fh->{parent}{stdin} = delete $fh->{child}{pty} if $fh->{child}{pty};
+  $fh->{child}{$_}->close for keys %{$fh->{child}};
+  $fh = $self->{fh} = $fh->{parent};
 
   weaken $self;
   my $reactor = $self->ioloop->reactor;
-  for my $name (qw(stderr stdout)) {
-    my $h = $fh->{$name};
+  for my $name (qw(pty stderr stdout)) {
+    my $h = $fh->{$name} or next;
+    $h->close_slave if $name eq 'pty';    # TODO: This is EXPERIMENTAL
     $reactor->io($h, sub { $self ? $self->_read($name => $h) : $_[0]->remove($h) })
       ->watch($h, 1, 0);
   }
@@ -252,6 +270,13 @@ Emitted in the parent process after the subprocess has been forked.
 
 =head1 ATTRIBUTES
 
+=head2 driver
+
+  $str  = $run3->driver;
+  $run3 = $run3->driver('pipe');
+
+Can be set to "pipe" (default) or "pty" to use L<IO::Pty> instead.
+
 =head2 ioloop
 
   $ioloop = $run3->ioloop;
@@ -274,6 +299,14 @@ like C<cat>.
 
 Returns the exit status part of L</status>, which will should be a number from
 0 to 255.
+
+=head2 handle
+
+  $fh = $run3->handle($name);
+
+Returns a file handle or undef from C<$name>, which can be "stdin", "stdout" or
+"stderr". This method returns the write or read "end" of the file handle
+depending if it is called from the parent or child process, but can also
 
 =head2 kill
 
