@@ -113,7 +113,7 @@ sub _prepare_filehandles {
   ($fh{parent}{stderr}, $fh{child}{stderr}) = $self->_make_pipe;
 
   if ($self->driver eq 'pty') {
-    ($fh{parent}{pty}, $fh{child}{pty}) = (IO::Pty->new) x 2;
+    $fh{parent}{pty} = $fh{child}{pty} = IO::Pty->new;
   }
   else {
     ($fh{child}{stdin}, $fh{parent}{stdin}) = $self->_make_pipe;
@@ -218,6 +218,7 @@ Mojo::Run3 - Run a subprocess and read/write to it
 
 =head1 SYNOPSIS
 
+  use Mojo::Base -strict, -signatures;
   use Mojo::Run3;
   use IO::Handle;
 
@@ -266,7 +267,8 @@ subprocess could not be started or the exit code from the subprocess.
 
   $run3->on(pty => sub ($run3, $bytes) { });
 
-Emitted when the subprocess write bytes to L<IO::Pty>.
+Emitted when the subprocess write bytes to L<IO::Pty>. See L</driver> for more
+details.
 
 =head2 stderr
 
@@ -293,7 +295,20 @@ Emitted in the parent process after the subprocess has been forked.
   $str  = $run3->driver;
   $run3 = $run3->driver('pipe');
 
-Can be set to "pipe" (default) or "pty" to use L<IO::Pty> instead.
+Can be set to "pipe" (default) or "pty" to run the child process inside a
+pseudoterminal, using L<IO::Pty>.
+
+The "pty" will be the L<controlling terminal|IO::Pty/make_slave_controlling_terminal>
+of the child process and the slave will be closed in the parent process.
+If further setup of the pty should be done, it must be done in the child
+process. Example:
+
+  $run3->start(sub ($pty3) {
+    my $pty = $pty3->handle('stdin'); # stdin is a IO::Tty object
+    $pty->set_winsize($row, $col, $xpixel, $ypixel);
+    $pty->set_raw;
+    exec qw(ssh -t server.example.com);
+  });
 
 =head2 ioloop
 
@@ -322,9 +337,9 @@ Returns the exit status part of L</status>, which will should be a number from
 
   $fh = $run3->handle($name);
 
-Returns a file handle or undef from C<$name>, which can be "stdin", "stdout" or
-"stderr". This method returns the write or read "end" of the file handle
-depending if it is called from the parent or child process, but can also
+Returns a file handle or undef from C<$name>, which can be "stdin", "stdout",
+"stderr" or "pty". This method returns the write or read "end" of the file
+handle depending if it is called from the parent or child process.
 
 =head2 kill
 
