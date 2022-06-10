@@ -6,8 +6,11 @@ use IO::Handle;
 use IO::Pty;
 use Mojo::IOLoop::ReadWriteFork::SIGCHLD;
 use Mojo::IOLoop;
+use Mojo::Util qw(term_escape);
 use Mojo::Promise;
 use Scalar::Util qw(blessed weaken);
+
+use constant DEBUG => $ENV{MOJO_RUN3_DEBUG} && 1;
 
 our $VERSION = '0.01';
 
@@ -20,6 +23,7 @@ has ioloop => sub { Mojo::IOLoop->singleton }, weak => 1;
 
 sub close {
   my ($self, $name) = @_;
+  $self->_d('close %s (%s)', $name, $self->{fh}{$name} // 'undef') if DEBUG;
   my $reactor = $self->ioloop->reactor;
   my $h       = delete $self->{fh}{$name} or return $self;
   $reactor->remove($h) unless $name eq 'stdin';
@@ -34,6 +38,7 @@ sub handle { $_[0]->{fh}{$_[1]} }
 
 sub kill {
   my ($self, $signal) = (@_, 15);
+  $self->_d('kill %s %s', $signal, $self->{pid} // 0) if DEBUG;
   return $self->{pid} ? kill $signal, $self->{pid} : -1;
 }
 
@@ -80,8 +85,14 @@ sub _cleanup {
   }
 }
 
+sub _d {
+  my ($self, $format, @args) = @_;
+  warn sprintf "[run3:%s:%s] $format\n", $self->driver, $self->{pid} // 0, @args;
+}
+
 sub _err {
   my ($self, $err, $errno) = @_;
+  $self->_d('finish %s (%s)', $err, $errno) if DEBUG;
   $self->{status} = $errno;
   $self->emit(error => $err)->emit('finish');
   $self->_cleanup;
@@ -95,8 +106,9 @@ sub _make_pipe {
 }
 
 sub _maybe_terminate {
-  my ($self, $pending_event) = @_;
-  $self->{$pending_event} = 0;
+  my ($self, $event) = @_;
+  $self->{$event} = 0;
+  $self->_d('eof=%s, sigchld=%s', map { $self->{$_} ? 0 : 1 } qw(wait_eof wait_sigchld)) if DEBUG;
   return if $self->{wait_eof} or $self->{wait_sigchld};
 
   $self->_cleanup;
@@ -126,13 +138,19 @@ sub _read {
   my ($self, $name, $handle) = @_;
 
   my $read = $handle->sysread(my $buf, 131072, 0);
-  unless (defined $read) {
-    return if $! == EAGAIN || $! == EINTR || $! == EWOULDBLOCK;    # Retry
+  if ($read) {
+    $self->_d('%s >>> %s (%i)', $name, term_escape($buf) =~ s!\n!\\n!gr, $read) if DEBUG;
+    return $self->emit($name => $buf);
+  }
+  elsif (defined $read) {
+    return $self->{wait_eof} ? $self->_maybe_terminate('wait_eof') : $self->close($name);
+  }
+  else {
+    $self->_d('%s !!! %s ($i)', $name, $!, int $1) if DEBUG;
+    return if $! == EAGAIN     || $! == EINTR || $! == EWOULDBLOCK;    # Retry
     return if $! == ECONNRESET || $! == EIO;
     return $self->emit(error => $!);
   }
-
-  return $read ? $self->emit($name => $buf) : $self->_maybe_terminate('wait_eof');
 }
 
 sub _start_child {
@@ -187,6 +205,7 @@ sub _start_parent {
   );
 
   $self->{fh} = $fh;
+  $self->_d('waitpid %s', $self->{pid}) if DEBUG;
   $self->emit('spawn');
   $self->_write;
 }
@@ -198,12 +217,14 @@ sub _write {
   my $stdin_write = $self->{fh}{stdin};
   my $written     = $stdin_write->syswrite($self->{buffer}{stdin});
   unless (defined $written) {
-    return if $! == EAGAIN || $! == EINTR || $! == EWOULDBLOCK;
-    return $self->kill(9) if $! == ECONNRESET || $! == EPIPE;
+    $self->_d('stdin !!! %s (%i)', $!, $!) if DEBUG;
+    return                                 if $! == EAGAIN     || $! == EINTR || $! == EWOULDBLOCK;
+    return $self->kill(9)                  if $! == ECONNRESET || $! == EPIPE;
     return $self->emit(error => $!);
   }
 
-  substr $self->{buffer}{stdin}, 0, $written, '';
+  my $buf = substr $self->{buffer}{stdin}, 0, $written, '';
+  $self->_d('stdin <<< %s (%i)', term_escape($buf) =~ s!\n!\\n!gr, length $buf) if DEBUG;
   return $self->emit('drain') unless length $self->{buffer}{stdin};
   return $self->ioloop->next_tick(sub { $self->_write });
 }

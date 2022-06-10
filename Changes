@@ -2,6 +2,7 @@ Revision history for perl distribution Mojo-Run3
 
 0.02 Not Released
  - Changed "read" event to "stdout", "stderr" and "pty"
+ - Add support for MOJO_RUN3_DEBUG=1
  - Add support for IO::Pty
  - Add handle()
 
