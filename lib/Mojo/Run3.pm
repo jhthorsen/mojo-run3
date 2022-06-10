@@ -211,19 +211,19 @@ and L</read> STDERR and STDOUT, without blocking the the event loop.
 
 =head2 drain
 
-  $run->on(drain => sub ($run) { });
+  $run3->on(drain => sub ($run3) { });
 
 =head2 error
 
-  $run->on(drain => sub ($run, $str) { });
+  $run3->on(drain => sub ($run3, $str) { });
 
 =head2 finish
 
-  $run->on(finish => sub ($run) { });
+  $run3->on(finish => sub ($run3) { });
 
 =head2 read
 
-  $run->on(finish => sub ($run, $bytes, $conduit) { });
+  $run3->on(finish => sub ($run3, $bytes, $conduit) { });
 
 =head2 spawn
 
@@ -231,47 +231,47 @@ and L</read> STDERR and STDOUT, without blocking the the event loop.
 
 =head2 ioloop
 
-  $ioloop = $run->ioloop;
-  $run    = $run->ioloop(Mojo::IOLoop->singleton);
+  $ioloop = $run3->ioloop;
+  $run3    = $run3->ioloop(Mojo::IOLoop->singleton);
 
 =head1 METHODS
 
 =head2 close
 
-  $run = $run->close('stdin');
+  $run3 = $run3->close('stdin');
 
 =head2 exit_code
 
-  $int = $run->exit_code;
+  $int = $run3->exit_code;
 
 =head2 kill
 
-  $int = $run->kill($signal);
+  $int = $run3->kill($signal);
 
 =head2 pid
 
-  $int = $run->pid;
+  $int = $run3->pid;
 
 =head2 run_p
 
-  $run = $run->run_p(sub ($run, $fh) { ... });
+  $run3 = $run3->run_p(sub ($run3, $fh) { ... });
 
 =head2 signal
 
-  $int = $run->signal;
+  $int = $run3->signal;
 
 =head2 start
 
-  $run = $run->start(sub ($run, $fh) { ... });
+  $run3 = $run3->start(sub ($run3, $fh) { ... });
 
 =head2 status
 
-  $int = $run->status;
+  $int = $run3->status;
 
 =head2 write
 
-  $run = $run->write($bytes);
-  $run = $run->write($bytes, sub ($run) { ... });
+  $run3 = $run3->write($bytes);
+  $run3 = $run3->write($bytes, sub ($run3) { ... });
 
 =head1 AUTHOR
 
