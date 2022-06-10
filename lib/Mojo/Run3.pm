@@ -15,7 +15,15 @@ our @SAFE_SIG = grep {
 
 has ioloop => sub { Mojo::IOLoop->singleton }, weak => 1;
 
-sub close { }
+sub close {
+  my ($self, $name) = @_;
+  my $reactor = $self->ioloop->reactor;
+  my $h       = delete $self->{fh}{$name} or return $self;
+  $reactor->remove($h) unless $name eq 'stdin';
+  $h->close;
+
+  return $self;
+}
 
 sub exit_code { shift->status >> 8 }
 
@@ -160,8 +168,8 @@ sub _start_parent {
     }
   );
 
-  $self->emit(spawn => $fh);
   $self->{fh} = $fh;
+  $self->emit(spawn => $fh);
   $self->_write;
 }
 

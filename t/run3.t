@@ -48,7 +48,19 @@ subtest 'kill' => sub {
   is $run3->status,    15, 'status';
   is $run3->exit_code, 0,  'exit_code';
   is $run3->signal,    15, 'signal';
+};
 
+subtest 'close' => sub {
+  my $run3 = Mojo::Run3->new;
+  ok $run3->close('stdin'), 'noop';
+
+  my $stdout = '';
+  $run3->on(read  => sub { $_[2] eq 'stdout' ? ($stdout .= $_[1]) : diag "STDERR <<< $_[1]" });
+  $run3->on(spawn => sub { shift->write("ice cool\n")->close('stdin') });
+  $run3->run_p(sub { exec qw(cat -) })->wait;
+  is $stdout, "ice cool\n", 'read';
+  ok $run3->pid > 0, 'pid';
+  is $run3->status, 0, 'status';
 };
 
 done_testing;
