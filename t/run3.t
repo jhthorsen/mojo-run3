@@ -45,9 +45,9 @@ subtest 'kill' => sub {
   $run3->on(spawn => sub { shift->kill('TERM') });
   $run3->run_p(sub { exec sleep => 10 })->wait;
   ok $run3->pid > 0, 'pid';
-  is $run3->status,    15, 'status';
-  is $run3->exit_code, 0,  'exit_code';
-  is $run3->signal,    15, 'signal';
+  is $run3->status,       15, 'status';
+  is $run3->exit_status,  0,  'exit_status';
+  is $run3->status & 127, 15, 'signal';
 };
 
 subtest 'close' => sub {
