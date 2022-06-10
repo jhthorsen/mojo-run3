@@ -1,0 +1,28 @@
+name: CI
+on: [push]
+jobs:
+  perl:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        perl-version:
+        - '5.16'
+        - '5.20'
+        - '5.26'
+        - '5.34'
+    container:
+      image: perl:${{matrix.perl-version}}
+    steps:
+    - uses: actions/checkout@v2
+    - name: perl -V
+      run: perl -V
+    - name: Install dependencies
+      run: |
+        cpanm -n EV~"!= 4.28"
+        cpanm -n https://github.com/mojolicious/mojo/archive/refs/tags/v8.25.tar.gz
+        cpanm -n Test::Pod Test::Pod::Coverage
+        cpanm -n --installdeps .
+    - name: Run perl tests
+      run: prove -l
+      env:
+        TEST_POD: 1
