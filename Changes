@@ -1,4 +1,11 @@
 Revision history for perl distribution Mojo-Run3
 
+0.02 Not Released
+ - Changed "read" event to "stdout", "stderr" and "pty"
+ - Add support for IO::Pty
+ - Add handle()
+
 0.01 2022-06-10T20:31:39+0900
- - Started project
+ - Add close(), kill(), start(), write()
+ - Add exit_status(), pid(), status()
+ - Add run_p()

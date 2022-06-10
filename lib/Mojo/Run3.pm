@@ -132,7 +132,7 @@ sub _read {
     return $self->emit(error => $!);
   }
 
-  return $read ? $self->emit(read => $buf, $name) : $self->_maybe_terminate('wait_eof');
+  return $read ? $self->emit($name => $buf) : $self->_maybe_terminate('wait_eof');
 }
 
 sub _start_child {
@@ -218,17 +218,24 @@ Mojo::Run3 - Run a subprocess and read/write to it
 
 =head1 SYNOPSIS
 
+  use Mojo::Run3;
+  use IO::Handle;
+
   my $run3 = Mojo::Run3->new;
-  $run3->on(read => sub ($run3, $bytes, $conduit) {
-    print STDOUT $bytes if $conduit eq 'stdout';
+  $run3->on(stdout => sub ($run3, $bytes) {
+    STDOUT->syswrite($bytes);
   });
 
   $run3->run_p(sub { exec qw(/usr/bin/ls -l /tmp) })->wait;
 
 =head1 DESCRIPTION
 
-L<Mojo::Run3> allows you to fork a subprocess which you can L</write> STDIN to,
-and L</read> STDERR and STDOUT, without blocking the the event loop.
+L<Mojo::Run3> allows you to fork a subprocess which you can write STDIN to, and
+read STDERR and STDOUT without blocking the the event loop.
+
+This module also supports L<IO::Pty> which allows you to create a
+pseudoterminal for the child process. This is especially useful for application
+such as C<bash> and L<ssh>.
 
 This module is currently EXPERIMENTAL, but unlikely to change much.
 
@@ -255,12 +262,23 @@ L</finish>, but L</finish> will always be emitted at some point after L</start>
 as long as the subprocess actually stops. L</status> will contain C<$!> if the
 subprocess could not be started or the exit code from the subprocess.
 
-=head2 read
+=head2 pty
 
-  $run3->on(finish => sub ($run3, $bytes, $conduit) { });
+  $run3->on(pty => sub ($run3, $bytes) { });
 
-Emitted when the subprocess write bytes. C<$conduit> can be "stdout" or
-"stderr".
+Emitted when the subprocess write bytes to L<IO::Pty>.
+
+=head2 stderr
+
+  $run3->on(stderr => sub ($run3, $bytes) { });
+
+Emitted when the subprocess write bytes to STDERR.
+
+=head2 stdout
+
+  $run3->on(stdout => sub ($run3, $bytes) { });
+
+Emitted when the subprocess write bytes to STDOUT.
 
 =head2 spawn
 
