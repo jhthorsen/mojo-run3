@@ -114,7 +114,7 @@ sub _read {
     return $self->emit(error => $!);
   }
 
-  return $read ? $self->emit($name => $buf) : $self->_maybe_terminate('wait_eof');
+  return $read ? $self->emit(read => $buf, $name) : $self->_maybe_terminate('wait_eof');
 }
 
 sub _start_child {
@@ -198,6 +198,26 @@ TODO
 
 L<Mojo::Run3> allows you to fork a subprocess which you can L</write> STDIN to,
 and L</read> STDERR and STDOUT, without blocking the the event loop.
+
+=head1 EVENTS
+
+=head2 drain
+
+  $run->on(drain => sub ($run) { });
+
+=head2 error
+
+  $run->on(drain => sub ($run, $str) { });
+
+=head2 finish
+
+  $run->on(finish => sub ($run) { });
+
+=head2 read
+
+  $run->on(finish => sub ($run, $bytes, $conduit) { });
+
+=head2 spawn
 
 =head1 ATTRIBUTES
 
