@@ -57,11 +57,20 @@ subtest 'close' => sub {
   my $run3 = Mojo::Run3->new;
   ok $run3->close('stdin'), 'noop';
 
-  my $stdout = '';
+  my ($stdout, %fh) = ('');
   $run3->on(stderr => sub { diag "STDERR <<< $_[1]" });
   $run3->on(stdout => sub { $stdout .= $_[1] });
-  $run3->on(spawn  => sub { shift->write("ice cool\n")->close('stdin') });
+  $run3->on(
+    spawn => sub {
+      my $run3 = shift;
+      $run3->handle($_) && $fh{$_}++ for qw(stdin stdout stderr);
+      $run3->write("ice cool\n")->close('stdin');
+    }
+  );
+
   $run3->run_p(sub { exec qw(cat -) })->wait;
+  ok !$run3->handle('stdin'), 'stdin closed';
+  is_deeply \%fh, {stdin => 1, stdout => 1, stderr => 1}, 'got filehandles in parent';
   is $stdout, "ice cool\n", 'read';
   ok $run3->pid > 0, 'pid';
   is $run3->status, 0, 'status';
