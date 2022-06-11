@@ -12,7 +12,7 @@ use Scalar::Util qw(blessed weaken);
 
 use constant DEBUG => $ENV{MOJO_RUN3_DEBUG} && 1;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 our @SAFE_SIG = grep {
   !m!^(NUM\d+|__[A-Z0-9]+__|ALL|CATCHALL|DEFER|HOLD|IGNORE|MAX|PAUSE|RTMAX|RTMIN|SEGV|SETS)$!

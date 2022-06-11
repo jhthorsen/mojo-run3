@@ -4,17 +4,25 @@ Mojo::Run3 - Run a subprocess and read/write to it
 
 # SYNOPSIS
 
+    use Mojo::Base -strict, -signatures;
+    use Mojo::Run3;
+    use IO::Handle;
+
     my $run3 = Mojo::Run3->new;
-    $run3->on(read => sub ($run3, $bytes, $conduit) {
-      print STDOUT $bytes if $conduit eq 'stdout';
+    $run3->on(stdout => sub ($run3, $bytes) {
+      STDOUT->syswrite($bytes);
     });
 
     $run3->run_p(sub { exec qw(/usr/bin/ls -l /tmp) })->wait;
 
 # DESCRIPTION
 
-[Mojo::Run3](https://metacpan.org/pod/Mojo%3A%3ARun3) allows you to fork a subprocess which you can ["write"](#write) STDIN to,
-and ["read"](#read) STDERR and STDOUT, without blocking the the event loop.
+[Mojo::Run3](https://metacpan.org/pod/Mojo%3A%3ARun3) allows you to fork a subprocess which you can write STDIN to, and
+read STDERR and STDOUT without blocking the the event loop.
+
+This module also supports [IO::Pty](https://metacpan.org/pod/IO%3A%3APty) which allows you to create a
+pseudoterminal for the child process. This is especially useful for application
+such as `bash` and [ssh](https://metacpan.org/pod/ssh).
 
 This module is currently EXPERIMENTAL, but unlikely to change much.
 
@@ -41,12 +49,24 @@ Emitted when the subprocess has ended. ["error"](#error) might be emitted before
 as long as the subprocess actually stops. ["status"](#status) will contain `$!` if the
 subprocess could not be started or the exit code from the subprocess.
 
-## read
+## pty
 
-    $run3->on(finish => sub ($run3, $bytes, $conduit) { });
+    $run3->on(pty => sub ($run3, $bytes) { });
 
-Emitted when the subprocess write bytes. `$conduit` can be "stdout" or
-"stderr".
+Emitted when the subprocess write bytes to [IO::Pty](https://metacpan.org/pod/IO%3A%3APty). See ["driver"](#driver) for more
+details.
+
+## stderr
+
+    $run3->on(stderr => sub ($run3, $bytes) { });
+
+Emitted when the subprocess write bytes to STDERR.
+
+## stdout
+
+    $run3->on(stdout => sub ($run3, $bytes) { });
+
+Emitted when the subprocess write bytes to STDOUT.
 
 ## spawn
 
@@ -55,6 +75,26 @@ Emitted when the subprocess write bytes. `$conduit` can be "stdout" or
 Emitted in the parent process after the subprocess has been forked.
 
 # ATTRIBUTES
+
+## driver
+
+    $str  = $run3->driver;
+    $run3 = $run3->driver('pipe');
+
+Can be set to "pipe" (default) or "pty" to run the child process inside a
+pseudoterminal, using [IO::Pty](https://metacpan.org/pod/IO%3A%3APty).
+
+The "pty" will be the [controlling terminal](https://metacpan.org/pod/IO%3A%3APty#make_slave_controlling_terminal)
+of the child process and the slave will be closed in the parent process.
+If further setup of the pty should be done, it must be done in the child
+process. Example:
+
+    $run3->start(sub ($pty3) {
+      my $pty = $pty3->handle('stdin'); # stdin is a IO::Tty object
+      $pty->set_winsize($row, $col, $xpixel, $ypixel);
+      $pty->set_raw;
+      exec qw(ssh -t server.example.com);
+    });
 
 ## ioloop
 
@@ -78,6 +118,14 @@ like `cat`.
 
 Returns the exit status part of ["status"](#status), which will should be a number from
 0 to 255.
+
+## handle
+
+    $fh = $run3->handle($name);
+
+Returns a file handle or undef from `$name`, which can be "stdin", "stdout",
+"stderr" or "pty". This method returns the write or read "end" of the file
+handle depending if it is called from the parent or child process.
 
 ## kill
 
