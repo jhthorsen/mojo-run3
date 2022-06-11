@@ -2,9 +2,10 @@ use Mojo::Base -strict;
 use Mojo::Run3;
 use Test::More;
 
-subtest 'status' => sub {
+subtest 'before start' => sub {
   my $run3 = Mojo::Run3->new;
-  is $run3->status, -1, 'before finish';
+  is $run3->pid,    0,  'pid';
+  is $run3->status, -1, 'status';
 };
 
 subtest 'stdout' => sub {

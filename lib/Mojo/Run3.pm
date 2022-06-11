@@ -26,7 +26,12 @@ sub close {
   $self->_d('close %s (%s)', $name, $self->{fh}{$name} // 'undef') if DEBUG;
   my $reactor = $self->ioloop->reactor;
   my $h       = delete $self->{fh}{$name} or return $self;
-  $reactor->remove($h) unless $name eq 'stdin';
+
+  if ($name ne 'stdin') {
+    $self->{finish}{$name}++;
+    $reactor->remove($h);
+  }
+
   $h->close;
 
   return $self;
@@ -105,16 +110,19 @@ sub _make_pipe {
   return $read, $write;
 }
 
-sub _maybe_terminate {
+sub _maybe_finish {
   my ($self, $event) = @_;
-  $self->{$event} = 0;
-  $self->_d('eof=%s, sigchld=%s', map { $self->{$_} ? 0 : 1 } qw(wait_eof wait_sigchld)) if DEBUG;
-  return if $self->{wait_eof} or $self->{wait_sigchld};
+  my $finish = $self->{finish} ||= {};
+  $finish->{$event}++;
+  $self->_d('finished %s', join ', ', sort keys %$finish) if DEBUG;
+  return 0 unless $finish->{child} and $finish->{stdout} and $finish->{stderr};
 
   $self->_cleanup;
   for my $cb (@{$self->subscribers('finish')}) {
     $self->emit(error => $@) unless eval { $self->$cb; 1 };
   }
+
+  return 1;
 }
 
 sub _prepare_filehandles {
@@ -143,12 +151,13 @@ sub _read {
     return $self->emit($name => $buf);
   }
   elsif (defined $read) {
-    return $self->{wait_eof} ? $self->_maybe_terminate('wait_eof') : $self->close($name);
+    return $self->close($name)->_maybe_finish($name);    # EOF
   }
   else {
-    $self->_d('%s !!! %s ($i)', $name, $!, int $1) if DEBUG;
-    return if $! == EAGAIN     || $! == EINTR || $! == EWOULDBLOCK;    # Retry
-    return if $! == ECONNRESET || $! == EIO;
+    $self->_d('%s !!! %s (%i)', $name, $!, $!) if DEBUG;
+    return undef                       if $! == EAGAIN || $! == EINTR || $! == EWOULDBLOCK;  # Retry
+    return $self->kill                 if $! == ECONNRESET || $! == EPIPE;
+    return $self->_maybe_finish($name) if $! == EIO;    # EOF on PTY raises EIO
     return $self->emit(error => $!);
   }
 }
@@ -196,11 +205,10 @@ sub _start_parent {
       ->watch($h, 1, 0);
   }
 
-  @$self{qw(wait_eof wait_sigchld)} = (1, 1);
   Mojo::IOLoop::ReadWriteFork::SIGCHLD->singleton->waitpid(
     $self->{pid} => sub {
       $self->{status} = $_[0];
-      $self->_maybe_terminate('wait_sigchld');
+      $self->_maybe_finish('child');
     }
   );
 
