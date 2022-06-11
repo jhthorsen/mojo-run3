@@ -18,11 +18,12 @@ jobs:
       run: perl -V
     - name: Install dependencies
       run: |
-        cpanm -n EV~"!= 4.28"
+        apt-get update && apt-get install -y lsof
         cpanm -n https://github.com/mojolicious/mojo/archive/refs/tags/v8.25.tar.gz
-        cpanm -n Test::Pod Test::Pod::Coverage
+        cpanm -n Test::Pod Test::Pod::Coverage Test::Memory::Cycle
         cpanm -n --installdeps .
     - name: Run perl tests
       run: prove -l
       env:
+        TEST_LSOF: 1
         TEST_POD: 1
