@@ -30,13 +30,18 @@ subtest 'stderr' => sub {
 };
 
 subtest 'stdin' => sub {
-  my $run3   = Mojo::Run3->new;
-  my $stdout = '';
+  my $run3 = Mojo::Run3->new;
+  my ($drained, $stdout) = (0, '');
   $run3->on(stderr => sub { diag "STDERR <<< $_[1]" });
   $run3->on(stdout => sub { $stdout .= $_[1] });
-  $run3->on(spawn  => sub { shift->write("cool beans\n") });
+  $run3->on(
+    spawn => sub {
+      shift->write("cool beans\n", sub { $drained++ });
+    }
+  );
   $run3->run_p(sub { print scalar <STDIN> })->wait;
-  is $stdout, "cool beans\n", 'read';
+  is $drained, 1,              'drained';
+  is $stdout,  "cool beans\n", 'read';
   ok $run3->pid > 0, 'pid';
   is $run3->status, 0, 'status';
 };
