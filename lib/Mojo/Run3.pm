@@ -146,9 +146,9 @@ sub _start_child {
   $fh->{parent}{$_}->close for keys %{$fh->{parent}};
   $fh = $self->{fh} = $fh->{child};
 
-  open STDIN,  '<&' . fileno($fh->{stdin})  or die "Could not dup stdin: $!";
-  open STDOUT, '>&' . fileno($fh->{stdout}) or die "Could not dup stdout: $!";
-  open STDERR, '>&' . fileno($fh->{stderr}) or die "Could not dup stderr: $!";
+  open STDIN,  '<&=', fileno($fh->{stdin})  or die "Could not dup stdin: $!";
+  open STDOUT, '>&=', fileno($fh->{stdout}) or die "Could not dup stdout: $!";
+  open STDERR, '>&=', fileno($fh->{stderr}) or die "Could not dup stderr: $!";
   STDOUT->autoflush(1);
   STDERR->autoflush(1);
 
