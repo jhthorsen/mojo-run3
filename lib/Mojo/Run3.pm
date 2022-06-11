@@ -176,7 +176,7 @@ sub _start_child {
   $self->{pid} = $$;
   eval { $self->$code };
   my ($err, $errno) = ($@, $@ ? 255 : $! || 0);
-  print STDERR $@ if length $@;
+  print STDERR $err if length $err;
   POSIX::_exit($errno) || exit $errno;
 }
 
