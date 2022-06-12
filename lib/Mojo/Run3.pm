@@ -33,13 +33,11 @@ sub close {
   }
 
   $h->close;
-
   return $self;
 }
 
 sub exit_status { shift->status >> 8 }
-
-sub handle { $_[0]->{fh}{$_[1]} }
+sub handle      { $_[0]->{fh}{$_[1]} }
 
 sub kill {
   my ($self, $signal) = (@_, 15);
@@ -63,8 +61,8 @@ sub start {
 
   $self->ioloop->next_tick(sub {
     $! = 0;
-    return $self->_err("Can't pipe: $@", $!) unless my $fh = eval { $self->_prepare_filehandles };
-    return $self->_err("Can't fork: $!", $!) unless defined($self->{pid} = fork);
+    return $self->_fail("Can't pipe: $@", $!) unless my $fh = eval { $self->_prepare_filehandles };
+    return $self->_fail("Can't fork: $!", $!) unless defined($self->{pid} = fork);
     return $self->{pid} ? $self->_start_parent($fh) : $self->_start_child($fh, $cb);
   });
 
@@ -75,7 +73,7 @@ sub write {
   my ($self, $chunk, $cb) = @_;
   $self->once(drain => $cb) if $cb;
   $self->{buffer}{stdin} .= $chunk;
-  $self->_write if $self->{fh}{stdin};
+  $self->_write;
   return $self;
 }
 
@@ -91,11 +89,11 @@ sub _cleanup {
 }
 
 sub _d {
-  my ($self, $format, @args) = @_;
-  warn sprintf "[run3:%s:%s] $format\n", $self->driver, $self->{pid} // 0, @args;
+  my ($self, $format, @val) = @_;
+  warn sprintf "[run3:%s:%s] $format\n", $self->driver, $self->{pid} // 0, @val;
 }
 
-sub _err {
+sub _fail {
   my ($self, $err, $errno) = @_;
   $self->_d('finish %s (%s)', $err, $errno) if DEBUG;
   $self->{status} = $errno;
@@ -127,7 +125,6 @@ sub _maybe_finish {
 
 sub _prepare_filehandles {
   my ($self) = @_;
-
   my %fh;
   ($fh{parent}{stdout}, $fh{child}{stdout}) = $self->_make_pipe;
   ($fh{parent}{stderr}, $fh{child}{stderr}) = $self->_make_pipe;
@@ -145,18 +142,18 @@ sub _prepare_filehandles {
 sub _read {
   my ($self, $name, $handle) = @_;
 
-  my $read = $handle->sysread(my $buf, 131072, 0);
-  if ($read) {
-    $self->_d('%s >>> %s (%i)', $name, term_escape($buf) =~ s!\n!\\n!gr, $read) if DEBUG;
+  my $n_bytes = $handle->sysread(my $buf, 131072, 0);
+  if ($n_bytes) {
+    $self->_d('%s >>> %s (%i)', $name, term_escape($buf) =~ s!\n!\\n!gr, $n_bytes) if DEBUG;
     return $self->emit($name => $buf);
   }
-  elsif (defined $read) {
+  elsif (defined $n_bytes) {
     return $self->close($name)->_maybe_finish($name);    # EOF
   }
   else {
     $self->_d('%s !!! %s (%i)', $name, $!, $!) if DEBUG;
     return undef                       if $! == EAGAIN || $! == EINTR || $! == EWOULDBLOCK;  # Retry
-    return $self->kill                 if $! == ECONNRESET || $! == EPIPE;
+    return $self->kill                 if $! == ECONNRESET || $! == EPIPE;                   # Error
     return $self->_maybe_finish($name) if $! == EIO;    # EOF on PTY raises EIO
     return $self->emit(error => $!);
   }
@@ -173,16 +170,16 @@ sub _start_child {
   $fh->{parent}{$_}->close for keys %{$fh->{parent}};
   $fh = $self->{fh} = $fh->{child};
 
-  open STDIN,  '<&=', fileno($fh->{stdin})  or die "Could not dup stdin: $!";
-  open STDOUT, '>&=', fileno($fh->{stdout}) or die "Could not dup stdout: $!";
-  open STDERR, '>&=', fileno($fh->{stderr}) or die "Could not dup stderr: $!";
+  open STDIN,  '<&=', fileno($fh->{stdin})  or die "Couldn't dup stdin: $!";
+  open STDOUT, '>&=', fileno($fh->{stdout}) or die "Couldn't dup stdout: $!";
+  open STDERR, '>&=', fileno($fh->{stderr}) or die "Couldn't dup stderr: $!";
   STDOUT->autoflush(1);
   STDERR->autoflush(1);
 
   @SIG{@SAFE_SIG} = ('DEFAULT') x @SAFE_SIG;
   ($@, $!) = ('', 0);
-
   $self->{pid} = $$;
+
   eval { $self->$code };
   my ($err, $errno) = ($@, $@ ? 255 : $! || 0);
   print STDERR $err if length $err;
@@ -221,20 +218,21 @@ sub _start_parent {
 sub _write {
   my $self = shift;
   return unless length $self->{buffer}{stdin};
+  return unless my $stdin = $self->{fh}{stdin};
 
-  my $stdin_write = $self->{fh}{stdin};
-  my $written     = $stdin_write->syswrite($self->{buffer}{stdin});
-  unless (defined $written) {
+  my $n_bytes = $stdin->syswrite($self->{buffer}{stdin});
+  if (defined $n_bytes) {
+    my $buf = substr $self->{buffer}{stdin}, 0, $n_bytes, '';
+    $self->_d('stdin <<< %s (%i)', term_escape($buf) =~ s!\n!\\n!gr, length $buf) if DEBUG;
+    return $self->emit('drain') unless length $self->{buffer}{stdin};
+    return $self->ioloop->next_tick(sub { $self->_write });
+  }
+  else {
     $self->_d('stdin !!! %s (%i)', $!, $!) if DEBUG;
     return                                 if $! == EAGAIN     || $! == EINTR || $! == EWOULDBLOCK;
     return $self->kill(9)                  if $! == ECONNRESET || $! == EPIPE;
     return $self->emit(error => $!);
   }
-
-  my $buf = substr $self->{buffer}{stdin}, 0, $written, '';
-  $self->_d('stdin <<< %s (%i)', term_escape($buf) =~ s!\n!\\n!gr, length $buf) if DEBUG;
-  return $self->emit('drain') unless length $self->{buffer}{stdin};
-  return $self->ioloop->next_tick(sub { $self->_write });
 }
 
 1;
@@ -285,7 +283,7 @@ Emitted when something goes wrong.
 
 =head2 finish
 
-  $run3->on(finish => sub ($run3) { });
+  $run3->on(finish => sub ($run3, @) { });
 
 Emitted when the subprocess has ended. L</error> might be emitted before
 L</finish>, but L</finish> will always be emitted at some point after L</start>
@@ -313,7 +311,7 @@ Emitted when the subprocess write bytes to STDOUT.
 
 =head2 spawn
 
-  $run3->on(spawn => sub ($run3) { });
+  $run3->on(spawn => sub ($run3, @) { });
 
 Emitted in the parent process after the subprocess has been forked.
 
@@ -366,7 +364,7 @@ Returns the exit status part of L</status>, which will should be a number from
 
   $fh = $run3->handle($name);
 
-Returns a file handle or undef from C<$name>, which can be "stdin", "stdout",
+Returns a file handle or undef for C<$name>, which can be "stdin", "stdout",
 "stderr" or "pty". This method returns the write or read "end" of the file
 handle depending if it is called from the parent or child process.
 
@@ -396,7 +394,7 @@ is emitted.
   $run3 = $run3->start(sub ($run3, @) { ... });
 
 Will start the subprocess. The code block passed in will be run in the child
-process. The code below can be used if you want to run another program:
+process. C<exec()> can be used if you want to run another program. Example:
 
   $run3 = $run3->start(sub { exec @my_other_program_with_args });
   $run3 = $run3->start(sub { exec qw(/usr/bin/ls -l /tmp) });
@@ -406,8 +404,8 @@ process. The code below can be used if you want to run another program:
   $int = $run3->status;
 
 Holds the exit status of the program or C<$!> if the program failed to start.
-The value includes signals and coredump flags, but L</exit_status> can be used
-be used to get the value from 0 to 255.
+The value includes signals and coredump flags. L</exit_status> can be used
+instead to get the exit value from 0 to 255.
 
 =head2 write
 
