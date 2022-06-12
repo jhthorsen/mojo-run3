@@ -1,6 +1,6 @@
 Revision history for perl distribution Mojo-Run3
 
-0.03 Not Released
+0.03 2022-06-12T11:21:31+0900
  - Need to receive EOF on boh STDERR and STDOUT before emitting "finish"
 
 0.02 2022-06-11T11:17:26+0900
