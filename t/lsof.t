@@ -35,6 +35,20 @@ for my $driver (@drivers) {
   };
 }
 
+subtest undef => sub {
+  my $run3 = Mojo::Run3->new(driver => 'pty');
+  $run3->on(stdout => sub { Mojo::IOLoop->stop });
+  $run3->start(sub { print 'started'; sleep 2 });
+  Mojo::IOLoop->start;
+  my $pid = $run3->pid;
+  undef $run3;
+
+  local $TODO = $todo;
+  is lsof(), $initial, 'lsof after undef';
+  Mojo::Promise->timer(0.1)->wait;
+  is kill(0 => $pid), 0, 'kill';
+};
+
 done_testing;
 
 sub lsof {

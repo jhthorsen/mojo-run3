@@ -1,5 +1,8 @@
 Revision history for perl distribution Mojo-Run3
 
+0.05 Not Released
+ - Will automatically clean up on destroy
+
 0.04 2022-06-13T10:46:18+0900
  - Fix also closing the pty when stdin gets closed
 

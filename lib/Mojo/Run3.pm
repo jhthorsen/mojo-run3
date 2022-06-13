@@ -202,6 +202,7 @@ sub _start_parent {
 
   Mojo::IOLoop::ReadWriteFork::SIGCHLD->singleton->waitpid(
     $self->{pid} => sub {
+      return unless $self;
       $self->{status} = $_[0];
       $self->_maybe_finish('child');
     }
@@ -232,6 +233,8 @@ sub _write {
     return $self->emit(error => $!);
   }
 }
+
+sub DESTROY { shift->_cleanup unless ${^GLOBAL_PHASE} eq 'DESTRUCT' }
 
 1;
 
