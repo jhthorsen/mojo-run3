@@ -23,13 +23,17 @@ has ioloop => sub { Mojo::IOLoop->singleton }, weak => 1;
 
 sub close {
   my ($self, $name) = @_;
-  $self->_d('close %s (%s)', $name, $self->{fh}{$name} // 'undef') if DEBUG;
+  my $fh      = $self->{fh};
   my $reactor = $self->ioloop->reactor;
-  my $h       = delete $self->{fh}{$name} or return $self;
 
-  if ($name ne 'stdin') {
+  $self->_d('close %s (%s)', $name, $fh->{$name} // 'undef') if DEBUG;
+  my $h = $fh->{$name} or return $self;
+
+  for my $sibling (keys %$fh) {
+    next if $fh->{$sibling} ne $h;
     $self->{finish}{$name}++;
-    $reactor->remove($h);
+    $reactor->remove($fh->{$sibling});
+    delete $fh->{$sibling};
   }
 
   $h->close;
@@ -79,13 +83,7 @@ sub write {
 
 sub _cleanup {
   my ($self) = @_;
-
-  my $reactor = $self->ioloop->reactor;
-  for my $name (qw(pty stdin stderr stdout)) {
-    my $h = delete $self->{fh}{$name} or next;
-    $reactor->remove($h) unless $name eq 'stdin';
-    $h->close;
-  }
+  $self->close($_) for qw(pty stdin stderr stdout);
 }
 
 sub _d {

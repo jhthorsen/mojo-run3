@@ -19,4 +19,21 @@ subtest 'bash' => sub {
   like $read{stdout}, qr{\bdev/$}m, 'stdout';
 };
 
+subtest 'close stdin' => sub {
+  my $run3 = Mojo::Run3->new(driver => 'pty');
+  $run3->ioloop->timer(2 => sub { $run3->kill(9) });
+
+  $run3->on(
+    spawn => sub {
+      my ($run3) = @_;
+      ok $run3->handle('pty'), 'got pty';
+      $run3->close('stdin');
+      ok !$run3->handle('pty'), 'close stdin also close pty';
+    }
+  );
+
+  $run3->run_p(sub { exec qw(bash -i) })->wait;
+  ok $run3->pid > 0, 'pid';
+};
+
 done_testing;
