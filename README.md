@@ -42,7 +42,7 @@ Emitted when something goes wrong.
 
 ## finish
 
-    $run3->on(finish => sub ($run3) { });
+    $run3->on(finish => sub ($run3, @) { });
 
 Emitted when the subprocess has ended. ["error"](#error) might be emitted before
 ["finish"](#finish), but ["finish"](#finish) will always be emitted at some point after ["start"](#start)
@@ -70,7 +70,7 @@ Emitted when the subprocess write bytes to STDOUT.
 
 ## spawn
 
-    $run3->on(spawn => sub ($run3) { });
+    $run3->on(spawn => sub ($run3, @) { });
 
 Emitted in the parent process after the subprocess has been forked.
 
@@ -123,7 +123,7 @@ Returns the exit status part of ["status"](#status), which will should be a numb
 
     $fh = $run3->handle($name);
 
-Returns a file handle or undef from `$name`, which can be "stdin", "stdout",
+Returns a file handle or undef for `$name`, which can be "stdin", "stdout",
 "stderr" or "pty". This method returns the write or read "end" of the file
 handle depending if it is called from the parent or child process.
 
@@ -153,7 +153,7 @@ is emitted.
     $run3 = $run3->start(sub ($run3, @) { ... });
 
 Will start the subprocess. The code block passed in will be run in the child
-process. The code below can be used if you want to run another program:
+process. `exec()` can be used if you want to run another program. Example:
 
     $run3 = $run3->start(sub { exec @my_other_program_with_args });
     $run3 = $run3->start(sub { exec qw(/usr/bin/ls -l /tmp) });
@@ -163,8 +163,8 @@ process. The code below can be used if you want to run another program:
     $int = $run3->status;
 
 Holds the exit status of the program or `$!` if the program failed to start.
-The value includes signals and coredump flags, but ["exit\_status"](#exit_status) can be used
-be used to get the value from 0 to 255.
+The value includes signals and coredump flags. ["exit\_status"](#exit_status) can be used
+instead to get the exit value from 0 to 255.
 
 ## write
 

@@ -1,6 +1,6 @@
 Revision history for perl distribution Mojo-Run3
 
-0.04 Not Released
+0.04 2022-06-13T10:46:18+0900
  - Fix also closing the pty when stdin gets closed
 
 0.03 2022-06-12T11:21:31+0900
