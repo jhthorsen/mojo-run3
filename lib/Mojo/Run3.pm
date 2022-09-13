@@ -14,9 +14,8 @@ use constant DEBUG => $ENV{MOJO_RUN3_DEBUG} && 1;
 
 our $VERSION = '0.05';
 
-our @SAFE_SIG = grep {
-  !m!^(NUM\d+|__[A-Z0-9]+__|ALL|CATCHALL|DEFER|HOLD|IGNORE|MAX|PAUSE|RTMAX|RTMIN|SEGV|SETS)$!
-} keys %SIG;
+our @SAFE_SIG
+  = grep { !m!^(NUM\d+|__[A-Z0-9]+__|ALL|CATCHALL|DEFER|HOLD|IGNORE|MAX|PAUSE|RTMAX|RTMIN|SEGV|SETS)$! } keys %SIG;
 
 has driver => 'pipe';
 has ioloop => sub { Mojo::IOLoop->singleton }, weak => 1;
@@ -27,6 +26,7 @@ sub close {
   my $reactor = $self->ioloop->reactor;
 
   $self->_d('close %s (%s)', $name, $fh->{$name} // 'undef') if DEBUG;
+
   my $h = $fh->{$name} or return $self;
 
   for my $sibling (keys %$fh) {
@@ -150,9 +150,9 @@ sub _read {
   }
   else {
     $self->_d('%s !!! %s (%i)', $name, $!, $!) if DEBUG;
-    return undef                       if $! == EAGAIN || $! == EINTR || $! == EWOULDBLOCK;  # Retry
-    return $self->kill                 if $! == ECONNRESET || $! == EPIPE;                   # Error
-    return $self->_maybe_finish($name) if $! == EIO;    # EOF on PTY raises EIO
+    return undef                               if $! == EAGAIN     || $! == EINTR || $! == EWOULDBLOCK;    # Retry
+    return $self->kill                         if $! == ECONNRESET || $! == EPIPE;                         # Error
+    return $self->_maybe_finish($name)         if $! == EIO;    # EOF on PTY raises EIO
     return $self->emit(error => $!);
   }
 }
@@ -196,8 +196,7 @@ sub _start_parent {
   for my $name (qw(pty stderr stdout)) {
     my $h = $fh->{$name} or next;
     $h->close_slave if $name eq 'pty';    # TODO: This is EXPERIMENTAL
-    $reactor->io($h, sub { $self ? $self->_read($name => $h) : $_[0]->remove($h) })
-      ->watch($h, 1, 0);
+    $reactor->io($h, sub { $self ? $self->_read($name => $h) : $_[0]->remove($h) })->watch($h, 1, 0);
   }
 
   Mojo::IOLoop::ReadWriteFork::SIGCHLD->singleton->waitpid(
