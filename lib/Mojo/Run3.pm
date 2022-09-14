@@ -23,6 +23,11 @@ our @SAFE_SIG
 has driver => 'pipe';
 has ioloop => sub { Mojo::IOLoop->singleton }, weak => 1;
 
+sub bytes_waiting {
+  my ($self, $name) = (@_, 'stdin');
+  return length($self->{buffer}{$name} // '');
+}
+
 sub close {
   my ($self, $name) = @_;
   return $self->_close_other if $name eq 'other';
@@ -369,6 +374,13 @@ process. Example:
 Holds a L<Mojo::IOLoop> object.
 
 =head1 METHODS
+
+=head2 bytes_waiting
+
+  $int = $run3->bytes_waiting;
+
+Returns how many bytes has been passed on to L</write> buffer, but not yet
+written to the child process.
 
 =head2 close
 
