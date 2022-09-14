@@ -105,12 +105,32 @@ Holds a [Mojo::IOLoop](https://metacpan.org/pod/Mojo%3A%3AIOLoop) object.
 
 # METHODS
 
+## bytes\_waiting
+
+    $int = $run3->bytes_waiting;
+
+Returns how many bytes has been passed on to ["write"](#write) buffer, but not yet
+written to the child process.
+
 ## close
 
+    $run3 = $run3->close('other');
     $run3 = $run3->close('stdin');
 
-Can be used to close `STDIN`. This is useful after piping data into a process
-like `cat`.
+Can be used to close `STDIN` or other filehandles that are not in use in a sub
+process.
+
+Closing "stdin" is useful after piping data into a process like `cat`.
+
+Here is an example of closing "other":
+
+    $run3->start(sub ($run3, @) {
+      $run3->close('other');
+      exec telnet => '127.0.0.1';
+    });
+
+Closing "other" is currently EXPERIMENTAL and might be changed later on, but it
+is unlikely it will get removed.
 
 ## exit\_status
 
