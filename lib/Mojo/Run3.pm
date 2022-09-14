@@ -387,6 +387,9 @@ Here is an example of closing "other":
     exec telnet => '127.0.0.1';
   });
 
+Closing "other" is currently EXPERIMENTAL and might be changed later on, but it
+is unlikely it will get removed.
+
 =head2 exit_status
 
   $int = $run3->exit_status;
