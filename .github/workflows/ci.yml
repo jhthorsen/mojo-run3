@@ -29,3 +29,4 @@ jobs:
         run: prove -l t/*.t
         env:
           HARNESS_OPTIONS: j4
+          TEST_LSOF: 1
