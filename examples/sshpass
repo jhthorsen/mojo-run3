@@ -5,8 +5,9 @@ use if -e 'lib/Mojo/Run3.pm', qw(lib lib);
 use IO::Handle;
 use Mojo::IOLoop::Stream;
 use Mojo::Run3;
-use Mojo::Util    qw(getopt);
-use Term::ReadKey ();
+use Mojo::Run3::Util qw(stty_set);
+use Mojo::Util       qw(getopt);
+use Term::ReadKey    ();
 
 my ($password, @winsize);
 die "Usage: $0 -e -- ssh example.com\n" unless @ARGV;
@@ -81,8 +82,12 @@ sub setup_stdin {
 
 sub start_child {
   my ($run3) = @_;
-  my $fh = $run3->handle('pty');
-  $fh->set_winsize(@winsize) if $fh;
+
+  if (my $fh = $run3->handle('pty')) {
+    stty_set $fh, qw(TCSANOW -ECHO);
+    $fh->set_winsize(@winsize) if $fh;
+  }
+
   exec @ARGV;
 }
 
