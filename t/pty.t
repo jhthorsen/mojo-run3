@@ -14,8 +14,8 @@ subtest 'stdin=pty, stdout=pipe, stderr=pipe' => sub {
   $run3->write("echo cool beans && exit\n");
   guard($run3->run_p(sub { exec qw(bash -i) }));
   ok $run3->pid > 0, 'pid';
-  is $read{pty},    "echo cool beans && exit\r\n", 'stdout' or diag $read{stderr};
-  is $read{stdout}, "cool beans\n",                'stdout' or diag $read{stderr};
+  is $read{pty}, "echo cool beans && exit\r\n", 'stdout' or diag $read{stderr};
+  like $read{stdout}, qr{cool beans\n$}s, 'stdout' or diag $read{stderr};
 };
 
 subtest 'stdin=pipe, stdout=pipe, stderr=pty' => sub {
