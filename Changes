@@ -1,6 +1,6 @@
 Revision history for perl distribution Mojo-Run3
 
-1.00 Not Released
+1.00 2023-01-17T19:33:47
  - Changed driver() to support driver per filehandle
  - Add support for seperate stdin and pty
  - Add support for attaching stdout or stderr to pty

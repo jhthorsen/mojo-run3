@@ -6,14 +6,31 @@ Mojo::Run3 - Run a subprocess and read/write to it
 
     use Mojo::Base -strict, -signatures;
     use Mojo::Run3;
-    use IO::Handle;
 
+This example gets "stdout" events when the "ls" command emits output:
+
+    use IO::Handle;
     my $run3 = Mojo::Run3->new;
     $run3->on(stdout => sub ($run3, $bytes) {
       STDOUT->syswrite($bytes);
     });
 
     $run3->run_p(sub { exec qw(/usr/bin/ls -l /tmp) })->wait;
+
+This example does the same, but on a remote host using ssh:
+
+    my $run3 = Mojo::Run3->new
+      ->driver({pty => 'pty', stdin => 'pipe', stdout => 'pipe', stderr => 'pipe'});
+
+    $run3->once(pty => sub ($run3, $bytes) {
+      $run3->write("my-secret-password\n", "pty") if $bytes =~ /password:/;
+    });
+
+    $run3->on(stdout => sub ($run3, $bytes) {
+      STDOUT->syswrite($bytes);
+    });
+
+    $run3->run_p(sub { exec qw(ssh example.com ls -l /tmp) })->wait;
 
 # DESCRIPTION
 
@@ -78,23 +95,27 @@ Emitted in the parent process after the subprocess has been forked.
 
 ## driver
 
-    $str  = $run3->driver;
-    $run3 = $run3->driver('pipe');
+    $hash_ref = $run3->driver;
+    $run3 = $self->driver({stdin => 'pipe', stdout => 'pipe', stderr => 'pipe'});
 
-Can be set to "pipe" (default) or "pty" to run the child process inside a
-pseudoterminal, using [IO::Pty](https://metacpan.org/pod/IO%3A%3APty).
+Used to set the driver for "pty", "stdin", "stdout" and "stderr".
 
-The "pty" will be the [controlling terminal](https://metacpan.org/pod/IO%3A%3APty#make_slave_controlling_terminal)
-of the child process and the slave will be closed in the parent process.
-If further setup of the pty should be done, it must be done in the child
-process. Example:
+Examples:
 
-    $run3->start(sub ($pty3) {
-      my $pty = $pty3->handle('stdin'); # stdin is a IO::Tty object
-      $pty->set_winsize($row, $col, $xpixel, $ypixel);
-      $pty->set_raw;
-      exec qw(ssh -t server.example.com);
-    });
+    # Open pipe for STDIN and STDOUT and close STDERR in child process
+    $self->driver({stdin => 'pipe', stdout => 'pipe'});
+
+    # Create a PTY and attach STDIN to it and open a pipe for STDOUT and STDERR
+    $self->driver({stdin => 'pty', stdout => 'pipe', stderr => 'pipe'});
+
+    # Create a PTY and pipes for STDIN, STDOUT and STDERR
+    $self->driver({pty => 'pty', stdin => 'pipe', stdout => 'pipe', stderr => 'pipe'});
+
+    # Create a PTY, but do not make the PTY slave the controlling terminal
+    $self->driver({pty => 'pty', stdout => 'pipe', make_slave_controlling_terminal => 0});
+
+    # It is not supported to set "pty" to "pipe"
+    $self->driver({pty => 'pipe'});
 
 ## ioloop
 
@@ -159,7 +180,8 @@ successfully sent.
 
     $int = $run3->pid;
 
-Process ID of the subprocess after ["start"](#start) has successfully started.
+Process ID of the child after ["start"](#start) has successfully started. The PID will
+be "0" in the child process and "-1" before the child process was started.
 
 ## run\_p
 
@@ -190,9 +212,12 @@ instead to get the exit value from 0 to 255.
 
     $run3 = $run3->write($bytes);
     $run3 = $run3->write($bytes, sub ($run3) { ... });
+    $run3 = $run3->write($bytes, $conduit);
+    $run3 = $run3->write($bytes, $conduit, sub ($run3) { ... });
 
-Used to write `$bytes` to the subprocess. The optional callback will be called
-on the next ["drain"](#drain) event.
+Used to write `$bytes` to the subprocess. `$conduit` can be "pty" or "stdin",
+and defaults to "stdin". The optional callback will be called on the next
+["drain"](#drain) event.
 
 # AUTHOR
 
@@ -205,4 +230,5 @@ the terms of the Artistic License version 2.0.
 
 # SEE ALSO
 
+[https://github.com/jhthorsen/mojo-run3/tree/main/examples](https://github.com/jhthorsen/mojo-run3/tree/main/examples),
 [Mojo::IOLoop::ReadWriteFork](https://metacpan.org/pod/Mojo%3A%3AIOLoop%3A%3AReadWriteFork), [IPC::Run3](https://metacpan.org/pod/IPC%3A%3ARun3).
