@@ -29,19 +29,14 @@ sub bytes_waiting {
 }
 
 sub close {
-  my ($self, $name) = @_;
-  return $self->_close_other if $name eq 'other';
+  my ($self, $conduit) = @_;
+  return $self->_close_other if $conduit eq 'other';
 
   my $fh = $self->{fh};
-  return $self unless my $handle = $fh->{$name};
+  return $self unless my $handle = $fh->{$conduit};
 
-  my $reactor = $self->ioloop->reactor;
-  $self->_d('close %s (%s)', $name, $fh->{$name} // 'undef') if DEBUG;
-
-  for my $sibling (keys %$fh) {
-    $reactor->remove(delete $fh->{$sibling}) if $fh->{$sibling} and $fh->{$sibling} eq $handle;
-  }
-
+  $self->_d('close %s (%s)', $conduit, $fh->{$conduit} // 'undef') if DEBUG;
+  $self->_remove($handle);
   $handle->close;
   return $self;
 }
@@ -165,6 +160,16 @@ sub _redirect {
   return $real->close || die "Couldn't close $conduit: $!" unless $virtual;
   $real->autoflush(1);
   return open($real, ($conduit eq 'stdin' ? '<&=' : '>&='), fileno($virtual)) || die "Couldn't dup $conduit: $!";
+}
+
+sub _remove {
+  my ($self, $handle) = @_;
+  my $fh      = $self->{fh};
+  my $reactor = $self->ioloop->reactor;
+
+  for my $name (keys %$fh) {
+    $reactor->remove(delete $fh->{$name}) if $fh->{$name} and $fh->{$name} eq $handle;
+  }
 }
 
 sub _start {
