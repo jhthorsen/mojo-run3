@@ -36,7 +36,7 @@ sub close {
   return $self unless my $handle = $fh->{$conduit};
 
   $self->_d('close %s (%s)', $conduit, $fh->{$conduit} // 'undef') if DEBUG;
-  $self->_remove($handle);
+  $self->_remove($handle, 1);
   $handle->close;
   return $self;
 }
@@ -83,6 +83,20 @@ sub _cleanup {
   $self->kill($signal) if $signal;
 }
 
+sub _close_from_child {
+  my ($self, $conduit) = @_;
+  delete $self->{watching}{$conduit};    # $conduit can also be "pid"
+  $self->_d('closed=%s watching="%s"', $conduit, join ' ', sort keys %{$self->{watching}}) if DEBUG;
+  return 0                                                                                 if keys %{$self->{watching}};
+
+  $self->close($_) for keys %{$self->{fh}};
+  for my $cb (@{$self->subscribers('finish')}) {
+    $self->emit(error => $@) unless eval { $self->$cb; 1 };
+  }
+
+  return 1;
+}
+
 sub _close_other {
   my ($self) = @_;
   croak "Cannot close 'other' in parent process!" if $self->pid != 0;
@@ -103,6 +117,7 @@ sub _close_other {
 
 sub _d {
   my ($self, $format, @val) = @_;
+  local $!;    # Do not reset $! in ex _read()
   warn sprintf "[run3:%s] $format\n", $self->{pid} // 0, @val;
 }
 
@@ -114,26 +129,6 @@ sub _fail {
   $self->_cleanup;
 }
 
-sub _maybe_finish {
-  my ($self, $reason) = @_;
-  my $status = $self->status;
-
-  if (DEBUG) {
-    $self->_d('finish=%s status=%s stdout=%s stderr=%s pty=%s',
-      $reason, $status, map { ref $self->{fh}{$_} } qw(stdout stderr pty));
-  }
-
-  return 0 if $status == -1;
-  return 0 if grep { $self->{fh}{$_} } qw(pty stdout stderr);
-
-  $self->close('stdin');
-  for my $cb (@{$self->subscribers('finish')}) {
-    $self->emit(error => $@) unless eval { $self->$cb; 1 };
-  }
-
-  return 1;
-}
-
 sub _read {
   my ($self, $name, $handle) = @_;
 
@@ -143,14 +138,13 @@ sub _read {
     return $self->emit($name => $buf);
   }
   elsif (defined $n_bytes) {
-    return $self->close($name)->_maybe_finish($name);    # EOF
+    return $self->_remove($handle, 0)->_close_from_child($name);    # EOF
   }
   else {
-    $self->close($name);
     $self->_d('op=read conduit=%s errstr="%s" errno=%s', $name, $!, int $!) if DEBUG;
-    return undef                       if $! == EAGAIN     || $! == EINTR || $! == EWOULDBLOCK;    # Retry
-    return $self->kill                 if $! == ECONNRESET || $! == EPIPE;                         # Error
-    return $self->_maybe_finish($name) if $! == EIO;    # EOF on PTY raises EIO
+    return undef       if $! == EAGAIN     || $! == EINTR || $! == EWOULDBLOCK;    # Retry
+    return $self->kill if $! == ECONNRESET || $! == EPIPE;                         # Error
+    return $self->_remove($handle, 0)->_close_from_child($name) if $! == EIO;      # EOF on PTY raises EIO
     return $self->emit(error => $!);
   }
 }
@@ -163,13 +157,18 @@ sub _redirect {
 }
 
 sub _remove {
-  my ($self, $handle) = @_;
+  my ($self, $handle, $delete) = @_;
   my $fh      = $self->{fh};
   my $reactor = $self->ioloop->reactor;
 
   for my $name (keys %$fh) {
-    $reactor->remove(delete $fh->{$name}) if $fh->{$name} and $fh->{$name} eq $handle;
+    next unless $fh->{$name} and $fh->{$name} eq $handle;
+    $reactor->remove($fh->{$name});
+    delete $fh->{$name} if $delete;
+    delete $self->{watching}{$name};
   }
+
+  return $self;
 }
 
 sub _start {
@@ -227,14 +226,16 @@ sub _start {
     next if $uniq{$fh}++;
     $reactor->io($fh, sub { $self ? $self->_read($conduit => $fh) : $_[0]->remove($fh) });
     $reactor->watch($fh, 1, 0);
+    $self->{watching}{$conduit} = 1;
   }
 
   $self->_d('waitpid %s', $self->{pid}) if DEBUG;
+  $self->{watching}{pid} = 1;
   Mojo::IOLoop::ReadWriteFork::SIGCHLD->singleton->waitpid(
     $self->{pid} => sub {
       return unless $self;
       $self->{status} = $_[0];
-      $self->_maybe_finish('waitpid');
+      $self->_close_from_child('pid');
     }
   );
 
