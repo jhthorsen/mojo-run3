@@ -496,6 +496,6 @@ the terms of the Artistic License version 2.0.
 =head1 SEE ALSO
 
 L<https://github.com/jhthorsen/mojo-run3/tree/main/examples>,
-L<Mojo::IOLoop::ReadWriteFork>, L<IPC::Run3>.
+L<Mojo::Run3::Util>, L<Mojo::IOLoop::ReadWriteFork>, L<IPC::Run3>.
 
 =cut
