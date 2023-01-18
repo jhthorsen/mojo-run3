@@ -231,4 +231,4 @@ the terms of the Artistic License version 2.0.
 # SEE ALSO
 
 [https://github.com/jhthorsen/mojo-run3/tree/main/examples](https://github.com/jhthorsen/mojo-run3/tree/main/examples),
-[Mojo::IOLoop::ReadWriteFork](https://metacpan.org/pod/Mojo%3A%3AIOLoop%3A%3AReadWriteFork), [IPC::Run3](https://metacpan.org/pod/IPC%3A%3ARun3).
+[Mojo::Run3::Util](https://metacpan.org/pod/Mojo%3A%3ARun3%3A%3AUtil), [Mojo::IOLoop::ReadWriteFork](https://metacpan.org/pod/Mojo%3A%3AIOLoop%3A%3AReadWriteFork), [IPC::Run3](https://metacpan.org/pod/IPC%3A%3ARun3).
