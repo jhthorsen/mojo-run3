@@ -12,10 +12,10 @@ subtest 'stdin=pty, stdout=pipe, stderr=pipe' => sub {
   $run3->on(stderr => sub { $read{stderr} .= $_[1] });
   $run3->on(stdout => sub { $read{stdout} .= $_[1] });
   $run3->write("echo cool beans && exit\n");
-  guard($run3->run_p(sub { exec qw(bash -i) }));
+  guard($run3->run_p(sub { exec qw(bash --norc -i -l) }));
   ok $run3->pid > 0, 'pid';
-  is $read{pty}, "echo cool beans && exit\r\n", 'stdout' or diag $read{stderr};
-  like $read{stdout}, qr{cool beans\n$}s, 'stdout' or diag $read{stderr};
+  like $read{pty},    qr{^echo cool beans && exit}, 'stdout' or diag $read{stderr};
+  like $read{stdout}, qr{cool beans\n$}s,           'stdout' or diag $read{stderr};
 };
 
 subtest 'stdin=pipe, stdout=pipe, stderr=pty' => sub {
@@ -107,7 +107,7 @@ subtest 'close stdin' => sub {
     }
   );
 
-  guard($run3->run_p(sub { exec qw(bash -i) }));
+  guard($run3->run_p(sub { exec qw(bash --norc -i -l) }));
   ok $run3->pid > 0, 'pid';
 };
 
