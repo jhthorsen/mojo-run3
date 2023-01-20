@@ -80,7 +80,7 @@ sub write {
 sub _cleanup {
   my ($self, $signal) = @_;
   return unless $self->{pid};
-  $self->close($_) for qw(pty stdin stderr stdout);
+  $self->close($_) for qw(slave pty stdin stderr stdout);
   $self->kill($signal) if $signal;
 }
 
@@ -119,7 +119,8 @@ sub _close_other {
 sub _close_slave {
   my ($self) = @_;
   my $pty = $self->{fh}{pty};
-  $pty->close_slave if $pty;
+  $self->_d('close slave (%s)', $pty && ${*$pty}{io_pty_slave} || 'undef') if DEBUG;
+  $pty->close_slave                                                        if $pty;
   return $self;
 }
 
@@ -225,13 +226,17 @@ sub _start {
 
   # Parent
   $self->{fh} = \%parent;
+  $self->{fh}{pty} = $pty if $pty;
 
-  if ($pty) {
-    $self->{fh}{pty} = $pty;
-    $pty->close_slave if $options->{close_slave} // 1;
+  # Close child filehandles unless we want to keep the tty open for a bit
+  for my $fh (values %child) {
+    if (blessed $fh and $fh->can('set_raw')) {
+      $self->close('slave') if $options->{close_slave} // 1;
+    }
+    else {
+      $fh->close;
+    }
   }
-
-  $_->close for values %child;
 
   weaken $self;
   my $reactor = $self->ioloop->reactor;

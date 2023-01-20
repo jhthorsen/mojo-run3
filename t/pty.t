@@ -71,7 +71,9 @@ subtest 'close slave' => sub {
   local $TODO = 'Looks like the internal structure has changed' unless ${*$master}{io_pty_slave};
   ok exists ${*$master}{io_pty_slave}, 'slave open';
 
+  local $! = 0;
   $run3->close('slave');
+  ok !$!,                               'closed' or diag $!;
   ok !exists ${*$master}{io_pty_slave}, 'slave closed';
 
   $p = Mojo::Promise->new;
