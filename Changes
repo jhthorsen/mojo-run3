@@ -1,6 +1,6 @@
 Revision history for perl distribution Mojo-Run3
 
-1.03 Not Released
+1.03 2023-01-20T14:19:44
  - Add support for manually closing the PTY slave
  - Add support for "pipe" shortcut for driver()
 

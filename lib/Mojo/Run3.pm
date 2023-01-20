@@ -15,7 +15,7 @@ use Scalar::Util qw(blessed weaken);
 use constant DEBUG        => $ENV{MOJO_RUN3_DEBUG} && 1;
 use constant MAX_OPEN_FDS => sysconf(_SC_OPEN_MAX);
 
-our $VERSION = '1.02';
+our $VERSION = '1.03';
 
 our @SAFE_SIG
   = grep { !m!^(NUM\d+|__[A-Z0-9]+__|ALL|CATCHALL|DEFER|HOLD|IGNORE|MAX|PAUSE|RTMAX|RTMIN|SEGV|SETS)$! } keys %SIG;
