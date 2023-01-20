@@ -59,6 +59,27 @@ subtest 'stdin=pty, stdout=pty, stderr=closed' => sub {
   is $read{stdout}, undef,     'stdout';
 };
 
+subtest 'close slave' => sub {
+  my $run3 = Mojo::Run3->new(driver => {close_slave => 0, pipe => 1, pty => 1});
+
+  my $p = Mojo::Promise->new;
+  $run3->on(stdout => sub { $p->resolve });
+  $run3->start(sub { print STDOUT "started\n"; sleep 2 });
+  guard($p);
+
+  my $master = $run3->handle('pty');
+  local $TODO = 'Looks like the internal structure has changed' unless ${*$master}{io_pty_slave};
+  ok exists ${*$master}{io_pty_slave}, 'slave open';
+
+  $run3->close('slave');
+  ok !exists ${*$master}{io_pty_slave}, 'slave closed';
+
+  $p = Mojo::Promise->new;
+  $run3->on(finish => sub { $p->resolve });
+  $run3->kill;
+  guard($p);
+};
+
 subtest 'internal test to check close-from-child.t mock state' => sub {
   my $run3 = Mojo::Run3->new(driver => 'pty');
   my (@fh, @watching);

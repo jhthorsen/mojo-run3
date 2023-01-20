@@ -1,5 +1,8 @@
 Revision history for perl distribution Mojo-Run3
 
+1.03 Not Released
+ - Add support for manually closing the PTY slave
+
 1.02 2023-01-18T17:58:48
  - Fix keeping filehandles open until the whole process has ended
 

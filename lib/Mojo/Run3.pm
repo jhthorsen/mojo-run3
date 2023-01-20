@@ -31,6 +31,7 @@ sub bytes_waiting {
 sub close {
   my ($self, $conduit) = @_;
   return $self->_close_other if $conduit eq 'other';
+  return $self->_close_slave if $conduit eq 'slave';
 
   my $fh = $self->{fh};
   return $self unless my $handle = $fh->{$conduit};
@@ -112,6 +113,13 @@ sub _close_other {
     POSIX::close($fileno);
   }
 
+  return $self;
+}
+
+sub _close_slave {
+  my ($self) = @_;
+  my $pty = $self->{fh}{pty};
+  $pty->close_slave if $pty;
   return $self;
 }
 
@@ -215,7 +223,12 @@ sub _start {
 
   # Parent
   $self->{fh} = \%parent;
-  ($pty->close_slave, ($self->{fh}{pty} = $pty)) if $pty;
+
+  if ($pty) {
+    $self->{fh}{pty} = $pty;
+    $pty->close_slave if $options->{close_slave} // 1;
+  }
+
   $_->close for values %child;
 
   weaken $self;
@@ -367,26 +380,29 @@ Emitted in the parent process after the subprocess has been forked.
 =head2 driver
 
   $hash_ref = $run3->driver;
-  $run3 = $self->driver({stdin => 'pipe', stdout => 'pipe', stderr => 'pipe'});
+  $run3 = $run3->driver({stdin => 'pipe', stdout => 'pipe', stderr => 'pipe'});
 
 Used to set the driver for "pty", "stdin", "stdout" and "stderr".
 
 Examples:
 
   # Open pipe for STDIN and STDOUT and close STDERR in child process
-  $self->driver({stdin => 'pipe', stdout => 'pipe'});
+  $run3->driver({stdin => 'pipe', stdout => 'pipe'});
 
   # Create a PTY and attach STDIN to it and open a pipe for STDOUT and STDERR
-  $self->driver({stdin => 'pty', stdout => 'pipe', stderr => 'pipe'});
+  $run3->driver({stdin => 'pty', stdout => 'pipe', stderr => 'pipe'});
 
   # Create a PTY and pipes for STDIN, STDOUT and STDERR
-  $self->driver({pty => 'pty', stdin => 'pipe', stdout => 'pipe', stderr => 'pipe'});
+  $run3->driver({pty => 'pty', stdin => 'pipe', stdout => 'pipe', stderr => 'pipe'});
+
+  # Create a PTY, and require the slave to to be manually closed
+  $run3->driver({pty => 'pty', stdout => 'pipe', close_slave => 0});
 
   # Create a PTY, but do not make the PTY slave the controlling terminal
-  $self->driver({pty => 'pty', stdout => 'pipe', make_slave_controlling_terminal => 0});
+  $run3->driver({pty => 'pty', stdout => 'pipe', make_slave_controlling_terminal => 0});
 
   # It is not supported to set "pty" to "pipe"
-  $self->driver({pty => 'pipe'});
+  $run3->driver({pty => 'pipe'});
 
 =head2 ioloop
 
@@ -406,23 +422,37 @@ written to the child process.
 
 =head2 close
 
-  $run3 = $run3->close('other');
-  $run3 = $run3->close('stdin');
+  $run3 = $run3->close($conduit);
 
-Can be used to close C<STDIN> or other filehandles that are not in use in a sub
-process.
+Used to close open filehandles. This method can be called in both parent and
+child process. C<$conduit> can be:
 
-Closing "stdin" is useful after piping data into a process like C<cat>.
+=over 2
 
-Here is an example of closing "other":
+=item * stdin, stdout, stderr
+
+Close STDIN, STDOUT or STDERR in parent or child process. Closing "stdin" is
+useful after piping data into a process like C<cat>.
+
+=item * pty, slave
+
+If L</driver> opens a "pty", there will be one filehandle opened for the child
+and one for the parent. The actual "pty" can be closed in both parent and child,
+while the "slave" can only be closed from the parent process if C<close_slave>
+was set to "0" (zero) in L</driver>.
+
+=item * other
+
+This is useful in the child process to close every filehandle that is not
+L<STDIN>, L<STDOUT> or L<STDERR>. This is required when opening programs that
+does not automatically do this for you, like "telnet":
 
   $run3->start(sub ($run3, @) {
     $run3->close('other');
     exec telnet => '127.0.0.1';
   });
 
-Closing "other" is currently EXPERIMENTAL and might be changed later on, but it
-is unlikely it will get removed.
+=back
 
 =head2 exit_status
 
