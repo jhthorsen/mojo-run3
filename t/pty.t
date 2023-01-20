@@ -19,7 +19,7 @@ subtest 'stdin=pty, stdout=pipe, stderr=pipe' => sub {
 };
 
 subtest 'stdin=pipe, stdout=pipe, stderr=pty' => sub {
-  my $run3 = Mojo::Run3->new(driver => {stdin => 'pipe', stdout => 'pipe', stderr => 'pty'});
+  my $run3 = Mojo::Run3->new(driver => {pipe => 1, stderr => 'pty'});
   my ($sent, %read);
   $run3->on(pty    => sub { $read{pty}    .= $_[1] });
   $run3->on(stderr => sub { $read{stderr} .= $_[1] });

@@ -22,8 +22,7 @@ sub main {
   @winsize = map { $winsize[$_] } (1, 0, 2, 3);                                     # row, col, xpixel, ypixel
 
   my $stdin = -t STDIN ? 'pty' : 'pipe';
-  my $run3
-    = Mojo::Run3->new(driver => {close_slave => 0, pty => 'pty', stdin => $stdin, stdout => 'pipe', stderr => 'pipe'});
+  my $run3  = Mojo::Run3->new(driver => {close_slave => 0, pipe => 1, pty => 'pty', stdin => $stdin});
   $run3->once(spawn  => \&setup_stdin);
   $run3->once(stdout => \&logged_in);
   $run3->on(error  => sub { abort($_[1]) });

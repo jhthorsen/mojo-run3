@@ -183,7 +183,9 @@ sub _start {
   my ($self, $cb) = @_;
 
   my $options = $self->driver;
-  $options = {stdin => $options, stdout => 'pipe', stderr => 'pipe'} unless ref $options;
+  $options        = {stdin => $options, stdout => 'pipe', stderr => 'pipe'} unless ref $options;
+  $options->{pty} = 'pty' if $options->{pty};
+  map { $options->{$_} //= 'pipe' } qw(stdin stdout stderr) if $options->{pipe};
 
   # Prepare IPC filehandles
   my ($pty, %child, %parent);
@@ -303,8 +305,7 @@ This example gets "stdout" events when the "ls" command emits output:
 
 This example does the same, but on a remote host using ssh:
 
-  my $run3 = Mojo::Run3->new
-    ->driver({pty => 'pty', stdin => 'pipe', stdout => 'pipe', stderr => 'pipe'});
+  my $run3 = Mojo::Run3->new->driver({pty => 1, pipe => 1}});
 
   $run3->once(pty => sub ($run3, $bytes) {
     $run3->write("my-secret-password\n", "pty") if $bytes =~ /password:/;
@@ -382,27 +383,26 @@ Emitted in the parent process after the subprocess has been forked.
   $hash_ref = $run3->driver;
   $run3 = $run3->driver({stdin => 'pipe', stdout => 'pipe', stderr => 'pipe'});
 
-Used to set the driver for "pty", "stdin", "stdout" and "stderr".
+Used to set the driver for "pty", "stdin", "stdout" and "stderr". The "pipe" key
+is a shortcut for setting "stdin", "stdout" and "stderr" to "pipe" unless
+specified.
 
 Examples:
 
   # Open pipe for STDIN and STDOUT and close STDERR in child process
-  $run3->driver({stdin => 'pipe', stdout => 'pipe'});
+  $run3->driver({pipe => 1, stderr => 'close'});
 
   # Create a PTY and attach STDIN to it and open a pipe for STDOUT and STDERR
   $run3->driver({stdin => 'pty', stdout => 'pipe', stderr => 'pipe'});
 
   # Create a PTY and pipes for STDIN, STDOUT and STDERR
-  $run3->driver({pty => 'pty', stdin => 'pipe', stdout => 'pipe', stderr => 'pipe'});
+  $run3->driver({pty => 1, stdin => 'pipe', stdout => 'pipe', stderr => 'pipe'});
 
   # Create a PTY, and require the slave to to be manually closed
-  $run3->driver({pty => 'pty', stdout => 'pipe', close_slave => 0});
+  $run3->driver({pty => 1, stdout => 'pipe', close_slave => 0});
 
   # Create a PTY, but do not make the PTY slave the controlling terminal
-  $run3->driver({pty => 'pty', stdout => 'pipe', make_slave_controlling_terminal => 0});
-
-  # It is not supported to set "pty" to "pipe"
-  $run3->driver({pty => 'pipe'});
+  $run3->driver({pty => 1, stdout => 'pipe', make_slave_controlling_terminal => 0});
 
 =head2 ioloop
 
